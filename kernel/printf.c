@@ -1,29 +1,30 @@
-// kernel/printf.c
+// 文件: kernel/printf.c
+// 描述: 最终的、集成了所有输出逻辑的实现。
 
+#include <stdarg.h>
 #include "types.h"
 #include "param.h"
-#include "riscv.h"
-#include "defs.h"
 #include "spinlock.h"
-#include <stdarg.h>
+#include "defs.h"
 
-// lock to avoid interleaving concurrent printf's.
+// panicking 标志位定义在此处
+volatile int panicking = 0;
+
 static struct {
   struct spinlock lock;
   int locking;
 } pr;
 
-
 static char digits[] = "0123456789abcdef";
 
 static void
-printint(int xx, int base, int sign)
+printint(long long xx, int base, int sign)
 {
-  char buf[16];
+  char buf[20];
   int i;
-  uint x;
+  unsigned long long x;
 
-  if(sign && (sign = xx < 0))
+  if(sign && (sign = (xx < 0)))
     x = -xx;
   else
     x = xx;
@@ -60,7 +61,7 @@ printf(const char *fmt, ...)
   if (fmt == 0)
     panic("null fmt");
 
-  if(pr.locking)
+  if(pr.locking && !panicking)
     acquire(&pr.lock);
 
   va_start(ap, fmt);
@@ -69,6 +70,7 @@ printf(const char *fmt, ...)
       consputc(c);
       continue;
     }
+    
     c = fmt[++i] & 0xff;
     if(c == 0)
       break;
@@ -88,6 +90,9 @@ printf(const char *fmt, ...)
       for(; *s; s++)
         consputc(*s);
       break;
+    case 'c':
+      consputc(va_arg(ap, int));
+      break;
     case '%':
       consputc('%');
       break;
@@ -99,16 +104,34 @@ printf(const char *fmt, ...)
   }
   va_end(ap);
 
-  if(pr.locking)
+  if(pr.locking && !panicking)
     release(&pr.lock);
   
   return 0;
 }
 
-// 这是新增的函数实现
+// panic 函数定义在此处
+void
+panic(char *s)
+{
+  panicking = 1;
+  printf("panic: ");
+  printf(s);
+  printf("\n");
+  for(;;)
+    ;
+}
+
 void
 printfinit(void)
 {
   initlock(&pr.lock, "pr");
   pr.locking = 1;
+}
+
+// clear_screen 函数也定义在此处
+void
+clear_screen(void)
+{
+    printf("\033[2J\033[H");
 }
