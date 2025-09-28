@@ -133,5 +133,7 @@ printfinit(void)
 void
 clear_screen(void)
 {
-    printf("\033[2J\033[H");
+      for (int i = 0; i < 100000; i++) {
+    consputc('\n');
+  }
 }
